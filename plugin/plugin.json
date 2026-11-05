@@ -1,0 +1,13 @@
+{
+  "name": "viber",
+  "displayName": "Viber Bot & Channel",
+  "version": "1.0.0",
+  "description": "Control Viber bots and channels, post messages, broadcast announcements, send media, and manage webhooks via MCP.",
+  "logo": "assets/logo.svg",
+  "repository": "https://github.com/herveyyy/viber-webhook",
+  "suggestedPrompts": [
+    "Post an announcement to my Viber Channel",
+    "Send a message to a user on Viber",
+    "Check Viber bot account details and status"
+  ]
+}

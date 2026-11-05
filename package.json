@@ -1,12 +1,13 @@
 {
-  "name": "viber-bun-service",
+  "name": "viber-webhook",
   "version": "1.0.0",
-  "description": "Viber Webhook & Channel Post API server with Bun.js & Vercel support",
+  "description": "Viber Webhook & Channel Post API server with Bun.js & Vercel support, plus Antigravity Plugin",
   "main": "src/index.ts",
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "build": "bun build src/index.ts --outdir dist"
+    "build": "bun build src/index.ts --outdir dist",
+    "install:plugin": "node scripts/install-plugin.js"
   },
   "dependencies": {
     "hono": "^4.7.4"
