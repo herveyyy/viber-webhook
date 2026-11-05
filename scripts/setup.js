@@ -11,6 +11,8 @@ const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
 const red = (s) => `\x1b[31m${s}\x1b[0m`;
 
+const DEFAULT_HOSTED_WEBHOOK = 'https://viber-webhook-six.vercel.app/webhook';
+
 function ask(question, defaultValue = '') {
   if (!process.stdin.isTTY) return Promise.resolve(defaultValue);
 
@@ -20,7 +22,7 @@ function ask(question, defaultValue = '') {
   });
 
   return new Promise((resolve) => {
-    const promptText = defaultValue ? `${question} (${defaultValue}): ` : `${question}: `;
+    const promptText = defaultValue ? `${question} [${defaultValue}]: ` : `${question}: `;
     rl.question(promptText, (answer) => {
       rl.close();
       resolve(answer.trim() || defaultValue);
@@ -83,16 +85,17 @@ async function main() {
 
   const args = process.argv.slice(2);
   let tokenArg = args.find((a) => a.startsWith('--token='))?.split('=')[1];
-  let skipVercel = args.includes('--skip-vercel');
-  let autoDeploy = args.includes('--deploy') || args.includes('-y');
-  let isAutomated = Boolean(tokenArg || autoDeploy || !process.stdin.isTTY);
+  let customUrlArg = args.find((a) => a.startsWith('--url='))?.split('=')[1];
+  let deployOwnVercel = args.includes('--own-vercel') || args.includes('--deploy');
+  let useShared = args.includes('--shared');
+  let isAutomated = Boolean(tokenArg || !process.stdin.isTTY);
 
   let token = tokenArg || process.env.VIBER_AUTH_TOKEN;
 
   // 1. Prompt for Token if not supplied
   if (!token) {
     console.log(bold('Step 1: Viber Authentication'));
-    console.log('You can find your token in your Viber Channel/Bot info screen -> Developer Tools.\n');
+    console.log('Find your token in Viber: Channel / Bot Info → Developer Tools.\n');
     token = await ask('🔑 Enter your VIBER_AUTH_TOKEN');
   }
 
@@ -162,41 +165,49 @@ async function main() {
   fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
   console.log(green(`   ✓ Installed plugin into Antigravity: ${antigravityPluginDir}`));
 
-  // 4. Vercel Deployment & Webhook Setup
-  console.log('\n' + bold('Step 3: Webhook & Vercel Deployment'));
-  let deployedUrl = '';
+  // 4. Webhook Hosting: Choose Shared vs Own Vercel
+  console.log('\n' + bold('Step 3: Webhook Hosting Options'));
+  let targetWebhookUrl = customUrlArg || '';
 
-  const wantsVercel = !skipVercel && (autoDeploy || (await ask('Deploy webhook to Vercel automatically? (Y/n)', 'Y')).toUpperCase() === 'Y');
-
-  if (wantsVercel) {
-    const vercelRunner = getVercelRunner();
-    const vercelBinary = vercelRunner.split(' ')[0];
-
-    console.log('🔍 Checking Vercel login status...');
-    let whoami = runCommand(`${vercelRunner} whoami`, { throwOnError: false });
-    if (!whoami) {
-      console.log(yellow('⚠️  You are not logged in to Vercel CLI. Launching login...'));
-      spawnSync(vercelBinary, ['vercel', 'login'], { stdio: 'inherit', shell: true });
-      whoami = runCommand(`${vercelRunner} whoami`, { throwOnError: false });
+  if (!targetWebhookUrl) {
+    let choice = '1';
+    if (!isAutomated && !deployOwnVercel && !useShared) {
+      console.log('How would you like to host your Viber Webhook?');
+      console.log(`  ${bold('1)')} Use hosted webhook (${DEFAULT_HOSTED_WEBHOOK}) - ${green('Instant, no Vercel sign-in needed')}`);
+      console.log(`  ${bold('2)')} Deploy to your own Vercel account - ${cyan('Full control, sign-in required')}`);
+      choice = await ask('\nSelect option (1 or 2)', '1');
+    } else if (deployOwnVercel) {
+      choice = '2';
     }
 
-    if (whoami) {
-      console.log(green(`   ✓ Logged in as: ${whoami}`));
-      console.log('🚀 Deploying production webhook to Vercel...');
+    if (choice === '2') {
+      // Deploy to their own Vercel account
+      const vercelRunner = getVercelRunner();
+      const vercelBinary = vercelRunner.split(' ')[0];
 
-      try {
-        const deployOutput = runCommand(`${vercelRunner} --prod --yes`, { cwd: rootDir });
-        const lines = deployOutput.split('\n').map((l) => l.trim()).filter(Boolean);
-        const foundUrl = lines.reverse().find((l) => l.startsWith('https://') && l.includes('.vercel.app'));
-        if (foundUrl) {
-          deployedUrl = foundUrl;
-          console.log(green(`   ✓ Deployed successfully to: ${deployedUrl}`));
-        } else {
-          console.log(yellow(`   ⚠️  Deployment finished. Output:\n${deployOutput}`));
-        }
+      console.log('\n🔍 Checking your Vercel sign-in status...');
+      let whoami = runCommand(`${vercelRunner} whoami`, { throwOnError: false });
+      if (!whoami) {
+        console.log(yellow('👉 Please sign in to your Vercel account in the prompt below:'));
+        spawnSync(vercelBinary, ['vercel', 'login'], { stdio: 'inherit', shell: true });
+        whoami = runCommand(`${vercelRunner} whoami`, { throwOnError: false });
+      }
 
-        console.log('🔑 Syncing environment variables to Vercel...');
+      if (whoami) {
+        console.log(green(`   ✓ Signed in to Vercel as: ${whoami}`));
+        console.log('🚀 Deploying your private webhook service to Vercel...');
+
         try {
+          const deployOutput = runCommand(`${vercelRunner} --prod --yes`, { cwd: rootDir });
+          const lines = deployOutput.split('\n').map((l) => l.trim()).filter(Boolean);
+          const foundUrl = lines.reverse().find((l) => l.startsWith('https://') && l.includes('.vercel.app'));
+
+          if (foundUrl) {
+            targetWebhookUrl = `${foundUrl}/webhook`;
+            console.log(green(`   ✓ Deployed successfully to: ${foundUrl}`));
+          }
+
+          console.log('🔑 Syncing environment variables to your Vercel project...');
           spawnSync(vercelBinary, ['vercel', 'env', 'add', 'VIBER_AUTH_TOKEN', 'production', '--force'], {
             input: token,
             encoding: 'utf8',
@@ -212,49 +223,47 @@ async function main() {
             });
           }
           console.log(green('   ✓ Environment variables synchronized to Vercel!'));
-        } catch (envErr) {
-          console.log(yellow(`   ⚠️  Could not auto-sync env vars: ${envErr.message}`));
+        } catch (deployErr) {
+          console.error(red(`❌ Vercel deployment error: ${deployErr.message}`));
+          console.log(yellow(`Falling back to hosted webhook: ${DEFAULT_HOSTED_WEBHOOK}`));
+          targetWebhookUrl = DEFAULT_HOSTED_WEBHOOK;
         }
-      } catch (deployErr) {
-        console.error(red(`❌ Vercel deployment error: ${deployErr.message}`));
+      } else {
+        console.log(yellow(`⚠️  Not signed in to Vercel. Falling back to hosted webhook: ${DEFAULT_HOSTED_WEBHOOK}`));
+        targetWebhookUrl = DEFAULT_HOSTED_WEBHOOK;
       }
     } else {
-      console.log(yellow('⚠️  Skipping automatic Vercel deploy (not logged in).'));
+      // Use shared hosted webhook
+      targetWebhookUrl = DEFAULT_HOSTED_WEBHOOK;
+      console.log(green(`   ✓ Using hosted webhook: ${DEFAULT_HOSTED_WEBHOOK}`));
     }
   }
 
   // 5. Register Webhook with Viber
   console.log('\n' + bold('Step 4: Registering Webhook with Viber'));
-  let webhookUrl = deployedUrl ? `${deployedUrl}/webhook` : '';
+  const formattedUrl = targetWebhookUrl.endsWith('/webhook')
+    ? targetWebhookUrl
+    : `${targetWebhookUrl.replace(/\/$/, '')}/webhook`;
 
-  if (!webhookUrl && !isAutomated) {
-    webhookUrl = await ask('Enter your public HTTPS webhook URL (e.g., https://your-app.vercel.app/webhook)', '');
-  }
+  console.log(`📡 Registering URL: ${formattedUrl}`);
 
-  if (webhookUrl && webhookUrl.startsWith('https://')) {
-    const formattedUrl = webhookUrl.endsWith('/webhook') ? webhookUrl : `${webhookUrl.replace(/\/$/, '')}/webhook`;
-    console.log(`📡 Registering webhook: ${formattedUrl}`);
-
-    try {
-      const setRes = await fetch('https://chatapi.viber.com/pa/set_webhook', {
-        method: 'POST',
-        headers: {
-          'X-Viber-Auth-Token': token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url: formattedUrl }),
-      });
-      const setResult = await setRes.json();
-      if (setResult.status === 0) {
-        console.log(green('   ✓ Viber Webhook registered and verified successfully!'));
-      } else {
-        console.log(yellow(`   ⚠️  Viber returned: ${setResult.status_message || setResult.status}`));
-      }
-    } catch (whErr) {
-      console.error(red(`❌ Failed to register webhook: ${whErr.message}`));
+  try {
+    const setRes = await fetch('https://chatapi.viber.com/pa/set_webhook', {
+      method: 'POST',
+      headers: {
+        'X-Viber-Auth-Token': token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url: formattedUrl }),
+    });
+    const setResult = await setRes.json();
+    if (setResult.status === 0) {
+      console.log(green('   ✓ Viber Webhook registered and verified successfully!'));
+    } else {
+      console.log(yellow(`   ⚠️  Viber returned: ${setResult.status_message || setResult.status}`));
     }
-  } else {
-    console.log(yellow('⚠️  Webhook registration skipped.'));
+  } catch (whErr) {
+    console.error(red(`❌ Failed to register webhook: ${whErr.message}`));
   }
 
   // 6. Test Message

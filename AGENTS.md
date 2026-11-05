@@ -1,6 +1,6 @@
 # Viber Integration: Autonomous Agent Operating Protocol
 
-You are an agent operating in this workspace. When a user asks to setup, install, or use Viber, **treat them as a non-technical user who just wants it to work.** Do NOT discuss webhooks, SSL certificates, DNS, or serverless infrastructure unless explicitly asked.
+You are an agent operating in this workspace. When a user asks to setup, install, or use Viber, **treat them as a non-technical user who just wants it to work.**
 
 ---
 
@@ -10,7 +10,6 @@ You are an agent operating in this workspace. When a user asks to setup, install
 - *"Set up Viber"*
 - *"Connect my Viber"*
 - *"I want to post to my Viber Channel"*
-- *"Send a message to Viber"*
 - Or any variation...
 
 ### Follow these exact 3 steps:
@@ -25,27 +24,23 @@ Check if `VIBER_AUTH_TOKEN` is already in `.env` or the environment:
 > 2. Open the info screen and scroll down to **Developer Tools**.
 > 3. Copy your **Token** and paste it here!
 
-#### Step 2: Run the automated setup completely autonomously
-As soon as the user provides the token (or if already present), run:
+#### Step 2: Run the automated setup
+As soon as the user provides the token, run:
 
 ```bash
-node scripts/setup.js --token="<TOKEN>" --deploy
+node scripts/setup.js --token="<TOKEN>"
 ```
-*(Use `bun run setup --token="<TOKEN>" --deploy` if Bun is available).*
 
-This autonomous setup script will automatically:
-1. Validate the token directly with the Viber API.
-2. Auto-detect their Channel Name and Superadmin ID (no questions asked).
-3. Set up the local `.env` and `.cursor/mcp.json`.
-4. Install the plugin into Antigravity (`~/.gemini/config/plugins/viber`).
-5. Deploy the webhook endpoint to Vercel production and sync environment variables.
-6. Register the webhook with Viber to unlock the channel/bot.
-7. Dispatch an automatic confirmation test message to their channel!
-
-> **Note on Vercel Login:** If Vercel requires authentication, tell the user in plain English: *"A browser tab just opened to sign in to Vercel — click Approve to finish connecting your hosting."*
+**Hosting Modes:**
+- **Default (Hosted Webhook):** By default, it connects to the active hosted webhook (`https://viber-webhook-six.vercel.app/webhook`). No Vercel sign-in or deployment required!
+- **Own Vercel Account:** If the user explicitly asks to deploy to their *own* Vercel account, run with `--own-vercel`:
+  ```bash
+  node scripts/setup.js --token="<TOKEN>" --own-vercel
+  ```
+  *(If Vercel login is required, tell them: "A browser tab just opened to sign in to your Vercel account — click Approve to continue!")*
 
 #### Step 3: Confirm with a friendly message
-Once the command finishes, tell the user:
+Once finished, tell the user:
 
 > 🎉 **Your Viber Channel is connected and ready!**
 > 
@@ -53,27 +48,5 @@ Once the command finishes, tell the user:
 > 
 > From now on, you can just tell me:
 > - *"Post 'New update coming tomorrow!' to my channel"*
-> - *"Send an image to my channel"*
-> - *"Check my Viber channel stats"*
-
----
-
-## 📡 Operational Shortcuts for the Agent
-
-Once connected, when the user asks to send a post or message:
-
-### 1. Posting to the Channel (Broadcasting)
-Send a POST request to `https://chatapi.viber.com/pa/post`:
-- Header: `X-Viber-Auth-Token: <token>`
-- Body:
-  ```json
-  {
-    "from": "<superadmin_id>",
-    "type": "text",
-    "text": "<message>"
-  }
-  ```
-
-### 2. Direct 1-on-1 Messages
-If interacting with a subscribed user ID:
-Use the `viber_viber` MCP tool `send_message` with `receiver: "<user_id>"` and `text: "<message>"`.
+> - *"Send a message"*
+> - *"Check my Viber stats"*
