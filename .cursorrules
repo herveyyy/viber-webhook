@@ -1,7 +1,9 @@
 # Cursor Rules for Viber Integration
 
-When the user asks to connect, setup, or post to Viber:
-1. Treat them as a non-technical user.
-2. If token is not present, ask for `VIBER_AUTH_TOKEN` (mention Channel info -> Developer Tools).
-3. Run `node scripts/setup.js --token="<TOKEN>" --deploy` autonomously.
+When the user asks to connect, setup, or use Viber:
+1. Ask for their `VIBER_AUTH_TOKEN` (mention Channel info -> Developer Tools).
+2. Ask their hosting choice:
+   - Option 1: Use hosted webhook (instant)
+   - Option 2: Deploy to their own Vercel account (ask for project name)
+3. Run `node scripts/setup.js` with `--token`, and either `--shared` or `--own-vercel --project="<NAME>"`.
 4. Report that their channel is connected and ready.
