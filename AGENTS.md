@@ -31,11 +31,11 @@ As soon as the user provides the token, run:
 node scripts/setup.js --token="<TOKEN>"
 ```
 
-**Hosting Modes:**
+**Hosting Modes & Project Naming:**
 - **Default (Hosted Webhook):** By default, it connects to the active hosted webhook (`https://viber-webhook-six.vercel.app/webhook`). No Vercel sign-in or deployment required!
-- **Own Vercel Account:** If the user explicitly asks to deploy to their *own* Vercel account, run with `--own-vercel`:
+- **Own Vercel Account with Custom Project Name:** If the user wants to deploy to their own Vercel account or choose their project name:
   ```bash
-  node scripts/setup.js --token="<TOKEN>" --own-vercel
+  node scripts/setup.js --token="<TOKEN>" --own-vercel --project="<PROJECT_NAME>"
   ```
   *(If Vercel login is required, tell them: "A browser tab just opened to sign in to your Vercel account — click Approve to continue!")*
 

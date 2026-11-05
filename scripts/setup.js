@@ -86,6 +86,7 @@ async function main() {
   const args = process.argv.slice(2);
   let tokenArg = args.find((a) => a.startsWith('--token='))?.split('=')[1];
   let customUrlArg = args.find((a) => a.startsWith('--url='))?.split('=')[1];
+  let projectArg = args.find((a) => a.startsWith('--project='))?.split('=')[1];
   let deployOwnVercel = args.includes('--own-vercel') || args.includes('--deploy');
   let useShared = args.includes('--shared');
   let isAutomated = Boolean(tokenArg || !process.stdin.isTTY);
@@ -174,13 +175,28 @@ async function main() {
     if (!isAutomated && !deployOwnVercel && !useShared) {
       console.log('How would you like to host your Viber Webhook?');
       console.log(`  ${bold('1)')} Use hosted webhook (${DEFAULT_HOSTED_WEBHOOK}) - ${green('Instant, no Vercel sign-in needed')}`);
-      console.log(`  ${bold('2)')} Deploy to your own Vercel account - ${cyan('Full control, sign-in required')}`);
+      console.log(`  ${bold('2)')} Deploy to your own Vercel account - ${cyan('Full control, choose project name & sign-in')}`);
       choice = await ask('\nSelect option (1 or 2)', '1');
     } else if (deployOwnVercel) {
       choice = '2';
     }
 
     if (choice === '2') {
+      // Prompt for custom project name
+      let projectName = projectArg;
+      if (!projectName) {
+        const defaultProj = `viber-${botName.toLowerCase().replace(/[^a-z0-9]/g, '-') || 'webhook'}`;
+        projectName = await ask('Name your Vercel project', defaultProj);
+      }
+
+      const sanitizedProjectName = projectName
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '') || 'viber-webhook';
+
+      console.log(cyan(`   ✓ Project name: "${sanitizedProjectName}"`));
+
       // Deploy to their own Vercel account
       const vercelRunner = getVercelRunner();
       const vercelBinary = vercelRunner.split(' ')[0];
@@ -195,10 +211,10 @@ async function main() {
 
       if (whoami) {
         console.log(green(`   ✓ Signed in to Vercel as: ${whoami}`));
-        console.log('🚀 Deploying your private webhook service to Vercel...');
+        console.log(`🚀 Deploying "${sanitizedProjectName}" to Vercel production...`);
 
         try {
-          const deployOutput = runCommand(`${vercelRunner} --prod --yes`, { cwd: rootDir });
+          const deployOutput = runCommand(`${vercelRunner} --prod --yes --project ${sanitizedProjectName} --create-if-missing`, { cwd: rootDir });
           const lines = deployOutput.split('\n').map((l) => l.trim()).filter(Boolean);
           const foundUrl = lines.reverse().find((l) => l.startsWith('https://') && l.includes('.vercel.app'));
 
@@ -207,15 +223,15 @@ async function main() {
             console.log(green(`   ✓ Deployed successfully to: ${foundUrl}`));
           }
 
-          console.log('🔑 Syncing environment variables to your Vercel project...');
-          spawnSync(vercelBinary, ['vercel', 'env', 'add', 'VIBER_AUTH_TOKEN', 'production', '--force'], {
+          console.log(`🔑 Syncing environment variables to project "${sanitizedProjectName}" on Vercel...`);
+          spawnSync(vercelBinary, ['vercel', 'env', 'add', 'VIBER_AUTH_TOKEN', 'production', '--project', sanitizedProjectName, '--force'], {
             input: token,
             encoding: 'utf8',
             shell: true,
             cwd: rootDir,
           });
           if (superadminId) {
-            spawnSync(vercelBinary, ['vercel', 'env', 'add', 'VIBER_SUPERADMIN_ID', 'production', '--force'], {
+            spawnSync(vercelBinary, ['vercel', 'env', 'add', 'VIBER_SUPERADMIN_ID', 'production', '--project', sanitizedProjectName, '--force'], {
               input: superadminId,
               encoding: 'utf8',
               shell: true,
