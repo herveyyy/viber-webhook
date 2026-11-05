@@ -2,10 +2,10 @@ import { Hono } from 'hono';
 
 const app = new Hono();
 
-// Helper to get environment variables across Bun and Node (Vercel)
-const getEnv = () => ({
-  authToken: process.env.VIBER_AUTH_TOKEN || '',
-  superadminId: process.env.VIBER_SUPERADMIN_ID || 'A6PFKxy+/v9xvsugeT+S3w==',
+// Helper to get environment variables across Bun, Node, and Vercel Edge
+const getEnv = (c?: any) => ({
+  authToken: process.env.VIBER_AUTH_TOKEN || c?.env?.VIBER_AUTH_TOKEN || '',
+  superadminId: process.env.VIBER_SUPERADMIN_ID || c?.env?.VIBER_SUPERADMIN_ID || 'A6PFKxy+/v9xvsugeT+S3w==',
 });
 
 // Health check endpoint
@@ -13,7 +13,7 @@ app.get('/', (c) => {
   return c.json({
     status: 'ok',
     message: 'Viber Bun Webhook Service is running!',
-    runtime: typeof Bun !== 'undefined' ? 'Bun' : 'Node/Vercel',
+    runtime: typeof Bun !== 'undefined' ? 'Bun' : 'Vercel Edge',
   });
 });
 
@@ -24,7 +24,7 @@ app.get('/', (c) => {
  */
 app.post('/webhook', async (c) => {
   try {
-    const body = await c.req.json();
+    const body = await c.req.json().catch(() => ({}));
     console.log('[Viber Event Received]:', JSON.stringify(body, null, 2));
 
     // Handle initial webhook verification ping from Viber
@@ -48,7 +48,7 @@ app.post('/webhook', async (c) => {
  * Usage: POST /api/post-channel with JSON: { "text": "Your message" }
  */
 app.post('/api/post-channel', async (c) => {
-  const { authToken, superadminId } = getEnv();
+  const { authToken, superadminId } = getEnv(c);
 
   if (!authToken) {
     return c.json({ error: 'VIBER_AUTH_TOKEN is not configured.' }, 500);
@@ -86,7 +86,7 @@ app.post('/api/post-channel', async (c) => {
  * Usage: POST /api/set-webhook with JSON: { "url": "https://your-domain.vercel.app/webhook" }
  */
 app.post('/api/set-webhook', async (c) => {
-  const { authToken } = getEnv();
+  const { authToken } = getEnv(c);
 
   if (!authToken) {
     return c.json({ error: 'VIBER_AUTH_TOKEN is not configured.' }, 500);
@@ -97,6 +97,8 @@ app.post('/api/set-webhook', async (c) => {
     return c.json({ error: 'A valid public HTTPS "url" is required.' }, 400);
   }
 
+  const targetUrl = url.endsWith('/webhook') ? url : `${url.replace(/\/$/, '')}/webhook`;
+
   try {
     const response = await fetch('https://chatapi.viber.com/pa/set_webhook', {
       method: 'POST',
@@ -105,7 +107,7 @@ app.post('/api/set-webhook', async (c) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: url.endsWith('/webhook') ? url : `${url}/webhook`,
+        url: targetUrl,
       }),
     });
 
