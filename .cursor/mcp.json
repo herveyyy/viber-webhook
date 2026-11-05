@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "viber": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@serhii.zghama/viber-mcp"
+      ],
+      "env": {
+        "VIBER_AUTH_TOKEN": "${VIBER_AUTH_TOKEN}",
+        "VIBER_SENDER_NAME": "MyBot"
+      }
+    }
+  }
+}

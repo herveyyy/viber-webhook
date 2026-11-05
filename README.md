@@ -1,54 +1,55 @@
-# Viber Webhook & Antigravity Plugin
+# Viber Webhook & Universal Agent Plugin
 
-A full-stack Viber integration providing:
+A complete Viber integration providing:
 1. **Webhook & Channel Post API Service**: Built with Bun and Hono, deployable to Vercel (Edge Functions) with trusted SSL.
-2. **Antigravity Plugin**: Bundled MCP server, skills, and operational rules for interacting with Viber bots and channels directly from Antigravity.
+2. **Universal AI Agent Plugin**: Bundled MCP server, skills, rules, and subagent definition compatible with **Antigravity**, **Cursor**, **Claude Code / Desktop**, **Windsurf**, and any MCP client.
 
 ---
 
-## 📦 Part 1: Antigravity Plugin Installation
+## 🤖 Supported Agents & IDEs
 
-The `plugin/` directory contains an installable Antigravity plugin with:
-- **MCP Server**: Powered by `@serhii.zghama/viber-mcp` (13 tools for messages, pictures, videos, files, broadcasts, etc.)
-- **Skill**: `/viber-bot` operational skill
-- **Rules**: Guardrails for Viber media constraints, broadcast limits, and webhook requirements
+| Agent / IDE | Support Type | Config Location |
+| :--- | :--- | :--- |
+| **Google Antigravity** | Native Plugin (`plugin.json`, skills, agents, rules) | `~/.gemini/config/plugins/viber/` |
+| **Cursor** | Native MCP (`.cursor/mcp.json`) + `.cursorrules` / `AGENTS.md` | Workspace root |
+| **Claude Code & Desktop** | MCP Server (`claude_desktop_config.json`) + `CLAUDE.md` | MCP config file |
+| **Windsurf & Cline** | MCP Server (`mcp_config.json`) + `AGENTS.md` | Workspace / settings |
 
-### Quick Install
+---
 
-Run the install script from the repository root:
+## 📦 Installation for AI Agents
 
+### 1. Antigravity Installation
+Run the one-line installer from the repository root:
 ```bash
 bun run install:plugin
 # or
 npm run install:plugin
 ```
+*Alternatively, copy the `plugin/` folder into `~/.gemini/config/plugins/viber/`.*
 
-### Manual Install
+Once installed, Antigravity gets:
+- **`viber` MCP Server**: 13 tools for messages, pictures, videos, files, broadcasts, etc.
+- **`@viber-bot` Agent**: Autonomous subagent for channel and bot management.
+- **`/viber-bot` Skill**: Slash command and operational workflow.
+- **Rules**: Guardrails for Viber media constraints, broadcast limits, and webhook requirements.
 
-Copy the `plugin` folder to your Antigravity plugins directory:
+### 2. Cursor Installation
+The repository already includes [`.cursor/mcp.json`](.cursor/mcp.json).
+Simply set your environment variable:
+```bash
+export VIBER_AUTH_TOKEN="your-viber-auth-token"
+```
+Or paste your token into `.cursor/mcp.json` under `env.VIBER_AUTH_TOKEN`. Cursor will automatically detect the Viber MCP tools and `AGENTS.md` rules.
 
-- **Windows (PowerShell):**
-  ```powershell
-  Copy-Item -Recurse -Force plugin "$HOME\.gemini\config\plugins\viber"
-  ```
-- **macOS / Linux:**
-  ```bash
-  mkdir -p ~/.gemini/config/plugins/viber
-  cp -r plugin/* ~/.gemini/config/plugins/viber/
-  ```
-
-### Configure the Plugin
-
-Edit `~/.gemini/config/plugins/viber/mcp_config.json`:
+### 3. Claude Desktop / Claude Code Installation
+Add the following to your `claude_desktop_config.json` (or Claude Code settings):
 ```json
 {
   "mcpServers": {
     "viber": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@serhii.zghama/viber-mcp"
-      ],
+      "args": ["-y", "@serhii.zghama/viber-mcp"],
       "env": {
         "VIBER_AUTH_TOKEN": "your-viber-auth-token",
         "VIBER_SENDER_NAME": "MyBot"
@@ -58,23 +59,22 @@ Edit `~/.gemini/config/plugins/viber/mcp_config.json`:
 }
 ```
 
-Once installed, restart or reopen Antigravity. You can test your bot at any time by asking:
-> *"@viber-bot check account info"* or *"/viber-bot please send message test"*
+### 4. Windsurf / Cline / Roo Code Installation
+Import the `mcpServers.viber` block above into your client's MCP configuration settings. The included [`AGENTS.md`](AGENTS.md) will be recognized automatically by the agent.
 
 ---
 
-## ⚡ Part 2: Webhook & Channel Post API Service
+## ⚡ Webhook & Channel Post API Service (Bun & Vercel)
 
 Viber requires an active, public HTTPS webhook with trusted CA SSL before allowing outbound posts and messages.
 
 ### Deploy to Vercel
 
 ```bash
-# Deploy with Vercel CLI
 bunx vercel --prod
 ```
 
-Or connect this repository in your [Vercel Dashboard](https://vercel.com/new).
+Or import this repository directly in your [Vercel Dashboard](https://vercel.com/new).
 
 ### Environment Variables on Vercel
 
@@ -84,7 +84,7 @@ Set these in **Project Settings → Environment Variables**:
 
 ### Register Your Webhook
 
-Once deployed to Vercel (e.g. `https://your-app.vercel.app`):
+Once deployed to Vercel (e.g., `https://your-app.vercel.app`):
 
 ```bash
 curl -X POST https://your-app.vercel.app/api/set-webhook \
