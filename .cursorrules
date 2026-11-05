@@ -1,0 +1,7 @@
+# Cursor Rules for Viber Integration
+
+When the user asks to connect, setup, or post to Viber:
+1. Treat them as a non-technical user.
+2. If token is not present, ask for `VIBER_AUTH_TOKEN` (mention Channel info -> Developer Tools).
+3. Run `node scripts/setup.js --token="<TOKEN>" --deploy` autonomously.
+4. Report that their channel is connected and ready.

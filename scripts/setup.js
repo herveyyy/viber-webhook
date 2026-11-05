@@ -12,6 +12,8 @@ const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
 const red = (s) => `\x1b[31m${s}\x1b[0m`;
 
 function ask(question, defaultValue = '') {
+  if (!process.stdin.isTTY) return Promise.resolve(defaultValue);
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -26,7 +28,6 @@ function ask(question, defaultValue = '') {
   });
 }
 
-// Helper to execute commands cross-platform
 function runCommand(cmd, opts = {}) {
   try {
     return execSync(cmd, { encoding: 'utf8', stdio: 'pipe', ...opts }).trim();
@@ -36,7 +37,6 @@ function runCommand(cmd, opts = {}) {
   }
 }
 
-// Recursive directory copy
 function copyFolderSync(from, to) {
   if (!fs.existsSync(to)) fs.mkdirSync(to, { recursive: true });
   for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
@@ -48,6 +48,14 @@ function copyFolderSync(from, to) {
       fs.copyFileSync(srcPath, destPath);
     }
   }
+}
+
+function getVercelRunner() {
+  try {
+    execSync('bun --version', { stdio: 'ignore' });
+    return 'bunx vercel';
+  } catch {}
+  return 'npx vercel';
 }
 
 async function verifyViberToken(token) {
@@ -73,10 +81,11 @@ async function main() {
   console.log(bold(cyan(' 🚀 Viber Universal Agent & Webhook Setup Wizard')));
   console.log(bold(cyan('=====================================================\n')));
 
-  // Parse arguments for CLI / Agent automation
   const args = process.argv.slice(2);
   let tokenArg = args.find((a) => a.startsWith('--token='))?.split('=')[1];
   let skipVercel = args.includes('--skip-vercel');
+  let autoDeploy = args.includes('--deploy') || args.includes('-y');
+  let isAutomated = Boolean(tokenArg || autoDeploy || !process.stdin.isTTY);
 
   let token = tokenArg || process.env.VIBER_AUTH_TOKEN;
 
@@ -124,13 +133,15 @@ async function main() {
   // Update .cursor/mcp.json
   const cursorMcpPath = path.join(rootDir, '.cursor', 'mcp.json');
   if (fs.existsSync(cursorMcpPath)) {
-    const cursorMcp = JSON.parse(fs.readFileSync(cursorMcpPath, 'utf8'));
-    if (cursorMcp.mcpServers?.viber) {
-      cursorMcp.mcpServers.viber.env.VIBER_AUTH_TOKEN = token;
-      cursorMcp.mcpServers.viber.env.VIBER_SENDER_NAME = botName;
-      fs.writeFileSync(cursorMcpPath, JSON.stringify(cursorMcp, null, 2));
-      console.log(green('   ✓ Updated .cursor/mcp.json for Cursor'));
-    }
+    try {
+      const cursorMcp = JSON.parse(fs.readFileSync(cursorMcpPath, 'utf8'));
+      if (cursorMcp.mcpServers?.viber) {
+        cursorMcp.mcpServers.viber.env.VIBER_AUTH_TOKEN = token;
+        cursorMcp.mcpServers.viber.env.VIBER_SENDER_NAME = botName;
+        fs.writeFileSync(cursorMcpPath, JSON.stringify(cursorMcp, null, 2));
+        console.log(green('   ✓ Updated .cursor/mcp.json for Cursor'));
+      }
+    } catch {}
   }
 
   // Install to Antigravity global plugins directory
@@ -155,29 +166,27 @@ async function main() {
   console.log('\n' + bold('Step 3: Webhook & Vercel Deployment'));
   let deployedUrl = '';
 
-  const wantsVercel = !skipVercel && (args.includes('--deploy') || (await ask('Deploy webhook to Vercel automatically? (Y/n)', 'Y')).toUpperCase() === 'Y');
+  const wantsVercel = !skipVercel && (autoDeploy || (await ask('Deploy webhook to Vercel automatically? (Y/n)', 'Y')).toUpperCase() === 'Y');
 
   if (wantsVercel) {
-    // Check CLI (prefer bunx or npx)
-    const vercelRunner = fs.existsSync(path.join(rootDir, 'bun.lock')) ? 'bunx vercel' : 'npx vercel';
+    const vercelRunner = getVercelRunner();
+    const vercelBinary = vercelRunner.split(' ')[0];
 
-    // Check login
     console.log('🔍 Checking Vercel login status...');
     let whoami = runCommand(`${vercelRunner} whoami`, { throwOnError: false });
     if (!whoami) {
       console.log(yellow('⚠️  You are not logged in to Vercel CLI. Launching login...'));
-      spawnSync(vercelRunner.split(' ')[0], ['vercel', 'login'], { stdio: 'inherit', shell: true });
+      spawnSync(vercelBinary, ['vercel', 'login'], { stdio: 'inherit', shell: true });
       whoami = runCommand(`${vercelRunner} whoami`, { throwOnError: false });
     }
 
     if (whoami) {
       console.log(green(`   ✓ Logged in as: ${whoami}`));
-      console.log('🚀 Deploying production webhook to Vercel (this may take ~20 seconds)...');
+      console.log('🚀 Deploying production webhook to Vercel...');
 
       try {
         const deployOutput = runCommand(`${vercelRunner} --prod --yes`, { cwd: rootDir });
         const lines = deployOutput.split('\n').map((l) => l.trim()).filter(Boolean);
-        // Look for the https://*.vercel.app URL
         const foundUrl = lines.reverse().find((l) => l.startsWith('https://') && l.includes('.vercel.app'));
         if (foundUrl) {
           deployedUrl = foundUrl;
@@ -186,17 +195,16 @@ async function main() {
           console.log(yellow(`   ⚠️  Deployment finished. Output:\n${deployOutput}`));
         }
 
-        // Add Env vars to Vercel
         console.log('🔑 Syncing environment variables to Vercel...');
         try {
-          spawnSync(vercelRunner.split(' ')[0], ['vercel', 'env', 'add', 'VIBER_AUTH_TOKEN', 'production', '--force'], {
+          spawnSync(vercelBinary, ['vercel', 'env', 'add', 'VIBER_AUTH_TOKEN', 'production', '--force'], {
             input: token,
             encoding: 'utf8',
             shell: true,
             cwd: rootDir,
           });
           if (superadminId) {
-            spawnSync(vercelRunner.split(' ')[0], ['vercel', 'env', 'add', 'VIBER_SUPERADMIN_ID', 'production', '--force'], {
+            spawnSync(vercelBinary, ['vercel', 'env', 'add', 'VIBER_SUPERADMIN_ID', 'production', '--force'], {
               input: superadminId,
               encoding: 'utf8',
               shell: true,
@@ -205,7 +213,7 @@ async function main() {
           }
           console.log(green('   ✓ Environment variables synchronized to Vercel!'));
         } catch (envErr) {
-          console.log(yellow(`   ⚠️  Could not auto-add env vars: ${envErr.message}`));
+          console.log(yellow(`   ⚠️  Could not auto-sync env vars: ${envErr.message}`));
         }
       } catch (deployErr) {
         console.error(red(`❌ Vercel deployment error: ${deployErr.message}`));
@@ -219,13 +227,13 @@ async function main() {
   console.log('\n' + bold('Step 4: Registering Webhook with Viber'));
   let webhookUrl = deployedUrl ? `${deployedUrl}/webhook` : '';
 
-  if (!webhookUrl) {
+  if (!webhookUrl && !isAutomated) {
     webhookUrl = await ask('Enter your public HTTPS webhook URL (e.g., https://your-app.vercel.app/webhook)', '');
   }
 
   if (webhookUrl && webhookUrl.startsWith('https://')) {
     const formattedUrl = webhookUrl.endsWith('/webhook') ? webhookUrl : `${webhookUrl.replace(/\/$/, '')}/webhook`;
-    console.log(`📡 Registering: ${formattedUrl}`);
+    console.log(`📡 Registering webhook: ${formattedUrl}`);
 
     try {
       const setRes = await fetch('https://chatapi.viber.com/pa/set_webhook', {
@@ -246,13 +254,13 @@ async function main() {
       console.error(red(`❌ Failed to register webhook: ${whErr.message}`));
     }
   } else {
-    console.log(yellow('⚠️  Skipped webhook registration. (You can register it later via /api/set-webhook).'));
+    console.log(yellow('⚠️  Webhook registration skipped.'));
   }
 
-  // 6. Optional Test Message
+  // 6. Test Message
   if (superadminId) {
     console.log('\n' + bold('Step 5: Verification Test Message'));
-    const sendTest = (await ask('Send a test announcement to your Viber Channel now? (Y/n)', 'Y')).toUpperCase() === 'Y';
+    const sendTest = isAutomated || (await ask('Send a test announcement to your Viber Channel now? (Y/n)', 'Y')).toUpperCase() === 'Y';
     if (sendTest) {
       try {
         const testRes = await fetch('https://chatapi.viber.com/pa/post', {
@@ -264,7 +272,7 @@ async function main() {
           body: JSON.stringify({
             from: superadminId,
             type: 'text',
-            text: '🚀 Viber Integration initialized successfully via Antigravity Setup Wizard!',
+            text: '🚀 Viber Integration initialized successfully via AI Agent!',
           }),
         });
         const testData = await testRes.json();
@@ -287,9 +295,7 @@ async function main() {
 You can now ask your AI Agent:
   💬 ${bold('"@viber-bot send a message"')}
   💬 ${bold('"Post an announcement to my Viber Channel"')}
-  💬 ${bold('"Check my Viber bot status"')}
-
-Run ${cyan('bun dev')} to start the local webhook server anytime.
+  💬 ${bold('"Check my Viber channel stats"')}
 `);
 }
 
